@@ -1,4 +1,4 @@
-import { estimateCost } from "@/lib/pricing";
+import { estimateCost, hasKnownPrice } from "@/lib/pricing";
 import type {
   ClaudeUsage,
   DailyUsage,
@@ -21,6 +21,7 @@ interface Entry {
   model: string;
   usage: RawUsage;
   cost: number;
+  priceKnown: boolean;
 }
 
 function emptyTotals(): UsageTotals {
@@ -31,6 +32,7 @@ function emptyTotals(): UsageTotals {
     cacheReadTokens: 0,
     totalTokens: 0,
     costUsd: 0,
+    hasUnknownModel: false,
   };
 }
 
@@ -45,6 +47,7 @@ function addEntry(t: UsageTotals, e: Entry): void {
     (e.usage.cache_creation_input_tokens ?? 0) +
     (e.usage.cache_read_input_tokens ?? 0);
   t.costUsd += e.cost;
+  if (!e.priceKnown) t.hasUnknownModel = true;
 }
 
 function localDateKey(ts: number): string {
@@ -58,7 +61,8 @@ function localDateKey(ts: number): string {
 // Parse the assistant token-usage entries out of one JSONL file's text.
 // Mirrors the server-side parser: only `type === "assistant"` lines with a real
 // model carry usage, and identical logical messages are de-duped on
-// messageId:requestId (falling back to the record uuid) the way ccusage does.
+// messageId:requestId (falling back to the stable messageId, then the record
+// uuid) the way ccusage does.
 function parseText(text: string, seen: Set<string>, entries: Entry[]): void {
   for (const line of text.split("\n")) {
     if (!line) continue;
@@ -75,14 +79,20 @@ function parseText(text: string, seen: Set<string>, entries: Entry[]): void {
     const usage: RawUsage = msg.usage ?? {};
 
     const dedupeKey =
-      msg.id && d.requestId ? `${msg.id}:${d.requestId}` : d.uuid ?? "";
+      msg.id && d.requestId ? `${msg.id}:${d.requestId}` : msg.id ?? d.uuid ?? "";
     if (dedupeKey && seen.has(dedupeKey)) continue;
     if (dedupeKey) seen.add(dedupeKey);
 
     const ts = Date.parse(d.timestamp);
     if (Number.isNaN(ts)) continue;
 
-    entries.push({ ts, model, usage, cost: estimateCost(model, usage) });
+    entries.push({
+      ts,
+      model,
+      usage,
+      cost: estimateCost(model, usage),
+      priceKnown: hasKnownPrice(model),
+    });
   }
 }
 
@@ -155,7 +165,7 @@ export function computeClaudeUsage(fileTexts: string[]): ClaudeUsage {
 
     let mb = modelMap.get(e.model);
     if (!mb) {
-      mb = { model: e.model, messages: 0, ...emptyTotals() };
+      mb = { model: e.model, messages: 0, priceKnown: hasKnownPrice(e.model), ...emptyTotals() };
       modelMap.set(e.model, mb);
     }
     mb.messages += 1;

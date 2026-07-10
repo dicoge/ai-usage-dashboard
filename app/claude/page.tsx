@@ -20,6 +20,15 @@ function Stat({ label, total }: { label: string; total: UsageTotals }) {
       </div>
       <div className="metric-sub" style={{ marginTop: 8 }}>
         <span className="pill">≈ {formatUsd(total.costUsd)}</span>
+        {total.hasUnknownModel && (
+          <span
+            className="pill"
+            style={{ color: "#f0c36d" }}
+            title="部分模型無公開價格，此費用僅計入已知模型，實際可能更高"
+          >
+            ⚠️ 部分費用未估
+          </span>
+        )}
       </div>
     </div>
   );
@@ -184,7 +193,15 @@ export default function ClaudePage() {
                     <td className="num">
                       {formatTokens(m.cacheReadTokens)} / {formatTokens(m.cacheCreationTokens)}
                     </td>
-                    <td className="num">{formatUsd(m.costUsd)}</td>
+                    <td className="num">
+                      {m.priceKnown ? (
+                        formatUsd(m.costUsd)
+                      ) : (
+                        <span className="pill" title="No list price for this model — cost not estimated">
+                          未知價格
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

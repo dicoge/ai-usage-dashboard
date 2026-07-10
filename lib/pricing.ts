@@ -26,10 +26,28 @@ const PRICE_TABLE: Array<[string, ModelPrice]> = [
 
 const ZERO: ModelPrice = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
 
+// Remember which unknown models we've already warned about so a large log with
+// thousands of entries for one new model only logs once, not per entry.
+const warnedUnknownModels = new Set<string>();
+
+// True when the model matches a known price-table prefix. The "By model" table
+// uses this to flag rows whose estimated cost is $0 only because we have no
+// list price for that model (as opposed to genuinely tiny spend).
+export function hasKnownPrice(model: string): boolean {
+  const m = model.toLowerCase();
+  return PRICE_TABLE.some(([prefix]) => m.startsWith(prefix));
+}
+
 export function priceForModel(model: string): ModelPrice {
   const m = model.toLowerCase();
   for (const [prefix, price] of PRICE_TABLE) {
     if (m.startsWith(prefix)) return price;
+  }
+  if (model && !warnedUnknownModels.has(m)) {
+    warnedUnknownModels.add(m);
+    console.warn(
+      `[pricing] No price table entry for model "${model}" — cost estimated as $0. Add it to PRICE_TABLE in lib/pricing.ts.`,
+    );
   }
   return ZERO;
 }

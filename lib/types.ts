@@ -7,11 +7,15 @@ export interface UsageTotals {
   cacheReadTokens: number;
   totalTokens: number;
   costUsd: number;
+  // True when any entry in this bucket used a model with no list price, so
+  // costUsd is under-estimated for the period.
+  hasUnknownModel: boolean;
 }
 
 export interface ModelBreakdown extends UsageTotals {
   model: string;
   messages: number;
+  priceKnown: boolean; // false when no list price exists, so cost is under-estimated
 }
 
 export interface DailyUsage extends UsageTotals {
